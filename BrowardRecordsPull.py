@@ -90,9 +90,41 @@ def Search(DocType, StartDate=None, EndDate=None):
     table = driver.find_element(By.ID, "SearchGridContainer")
     rows = table.find_elements(By.TAG_NAME, "tr")
     FirstIndirectName = []
+    CaseNumber = []
     for row in rows:
+        columns = row.find_elements(By.TAG_NAME, "td")
+        # for the first row, we need to find the column index for the First Indirect Name column, count the number of newlines in the row till we get to the column with First Indirect Name
+        if row.text.__contains__("Cart\nConsideration\nFirst Direct Name\nFirst Indirect Name"):
+            #Find the Number of Newlines are before First Inderect Name
+            FirstIndirectNameIndex = row.text.count("\n", 0, row.text.index("First Indirect Name"))
+            print("First Indirect Name Index: " + str(FirstIndirectNameIndex))
+            continue
+        else:
+            FirstIndirectNameIndex = 3
+
+        # print the indirect name column and append it to the FirstIndirectName list
+        print("IndirectName: " + columns[FirstIndirectNameIndex].text)
+        FirstIndirectName.append(columns[FirstIndirectNameIndex].text)
+
+        # Open the new window and switch to it
         row.click()
-        time.sleep(100)
+        time.sleep(5)
+        driver.switch_to.window(driver.window_handles[1])
+        # Get the DocBlock from the classname "docBlock"
+        DocBlock = driver.find_element(By.CLASS_NAME, "docBlock")
+        Details = DocBlock.find_elements(By.CLASS_NAME, "detailLabel")
+        ListDocDetails = DocBlock.find_elements(By.CLASS_NAME, "listDocDetails")
+        # Find the Details that has the Text "Case Number:"
+        for Detail in Details:
+            if Detail.text.__contains__("Case Number:"):
+                print("Case Number: " + ListDocDetails[Details.index(Detail)].text)
+                CaseNumber.append(ListDocDetails[Details.index(Detail)].text)
+        time.sleep(2)
+
+        # close the new window and switch back to the main window
+        driver.close()
+        driver.switch_to.window(driver.window_handles[0])
+        time.sleep(2)
 
     return 0
 

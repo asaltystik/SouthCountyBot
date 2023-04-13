@@ -5,6 +5,7 @@
 
 # Import the necessary modules
 import os
+import re
 import time
 import datetime
 import pandas as pd
@@ -190,12 +191,187 @@ def SeparateNames(df):
     df = df.rename(columns={"FirstIndirectName": "CompanyName"})
     return df
 
+# Sets row to NAN if needed.
+def SetNAN(index, df):
+    df.at[index, "Address"] = "NAN"
+    df.at[index, "City"] = "NAN"
+    df.at[index, "State"] = "NAN"
+    df.at[index, "Zip"] = "NAN"
+    df.at[index, "MailingAddress"] = "NAN"
+    df.at[index, "MailingCity"] = "NAN"
+    df.at[index, "MailingState"] = "NAN"
+    df.at[index, "MailingZip"] = "NAN"
+    df.at[index, "JustMarketValue"] = "NAN"
+    df.at[index, "Taxes"] = "NAN"
+    df.at[index, "Bed"] = "NAN"
+    df.at[index, "Bath"] = "NAN"
+    df.at[index, "SqFt"] = "NAN"
+    return df
+
+
+# This Function will Split a Mailing Address into house number, street direction, street name, street type, unit number (if applicable), City, State, Zip
+def SplitMailingAddress(mailAddress):
+    # Street Types
+    StreetTypes = ["ALY", "AVE", "BND", "BLVD", "CSWY", "CIR", "CT", "CV", "DR", "EXT", "HWY", "HOLW", "ISLE", "LN",
+                   "LNDG", "MNR", "MILE", "PARK", "PASS", "PATH", "PL", "PT", "RD", "ROW", "SQ", "ST", "TER", "TWP",
+                   "TRCE", "TRL", "VIEW", "WALK", "WAY"]
+    # City Names
+    CityNames = ["COCONUT CREEK", "COOPER CITY", " CORAL SPRINGS", "DANIA BEACH", "DAVIE", "DEERFIELD BEACH",
+                 "FORT LAUDERDALE", "HALLANDALE BEACH", "HILLSBORO BEACH", "HOLLYWOOD", "LAUDERDALE BY THE SEA",
+                 "LAUDERDALE LAKES", "LAUDERHILL", "LAZY LAKE", "LIGHTHOUST POINT", "MARGATE", "MIRAMAR",
+                 "NORTH LAUDERDALE", "OAKLAND PARK", "PARKLAND", "PEMBROKE PARK", "PEMBROKE PINES", "PLANTATION",
+                 "POMPANO BEACH", "SEA RANCH LAKES", "SOUTHWEST RANCHES", "SUNRISE", "TAMARAC", "UNINCORPORATED",
+                 "WEST PARK", "WILTON MANORS"]
+
+    # Create the Variables to hold the Mailing Address, City
+    MailingAddr = ""
+    UnitNumber = ""
+    City = ""
+    Remaining = ""
+
+    # Split the mailing address after an occurance of StreetTypes
+    for streetType in StreetTypes:
+        if mailAddress.__contains__(streetType):
+            # Need a Variable to hold the first part of the address which is just after the Street Type
+            # and the second part of the address which is the rest of the address
+            MailingAddr = mailAddress.split(streetType)[0] + streetType
+            Remaining = mailAddress.split(streetType)[1]
+            break
+
+    # Use a regex to seperate a unit number from the Remaining. Unit numbers are in the format of #2. #210, #*/dA, UNIT #*/d.
+    # Unit Numbers are optional but would be at the Beginning of the Remaining string
+    # If there is a unit number, then the first part of the address is the unit number and the second part of the address is the rest of the address
+    # If there is no unit number, then the first part of the address is the rest of the address and the second part of the address is empty
+    if re.search(r"UNIT \d+", Remaining):
+        UnitNumber = re.search(r"UNIT \d+", Remaining).group(0)
+        MailingAddr = MailingAddr + " " + UnitNumber
+        Remaining = Remaining.split(UnitNumber)[1]
+    elif re.search(r"#\d+", Remaining):
+        UnitNumber = re.search(r"\d+", Remaining).group(0)
+        MailingAddr = MailingAddr + " #" + UnitNumber
+        Remaining = Remaining.split(UnitNumber)[1]
+    elif re.search(r"#\d+[A-Z]", Remaining):
+        UnitNumber = re.search(r"#\d+[A-Z]", Remaining).group(0)
+        MailingAddr = MailingAddr + " #" + UnitNumber
+        Remaining = Remaining.split(UnitNumber)[1]
+    else:
+        Remaining = Remaining
+
+    # use City Names to find the City in the Remaining string
+    for cityName in CityNames:
+        if Remaining.__contains__(cityName):
+            City = cityName
+            Remaining = Remaining.split(cityName)[1]
+            break
+
+    # The Remaining String should now only contain the State and Zip Code
+    State = Remaining.split(" ")[-2]
+    Zip = Remaining.split(" ")[-1]
+    Zip = Zip[0:5]
+
+    # Return the Mailing Address, Unit Number, City, State, Zip
+    return MailingAddr, City, State, Zip
+
+
+# This Function will take a dataframe and grab the address' from the Broward County Property Appraiser Website
+def GetAddress(driver, df):
+    # Create the Address, City, State, Zip, MailingAddress, MailingCity, MailingState, MailingZip columns,
+    # Just Market Value, Taxes, Bed, Bath, SqFt
+    df["Address"] = ""
+    df["City"] = ""
+    df["State"] = ""
+    df["Zip"] = ""
+    df["MailingAddress"] = ""
+    df["MailingCity"] = ""
+    df["MailingState"] = ""
+    df["MailingZip"] = ""
+    df["JustMarketValue"] = ""
+    df["Taxes"] = ""
+    df["Bed"] = ""
+    df["Bath"] = ""
+    df["SqFt"] = ""
+
+    # Loop through the dataframe and grab the address for each row
+    for index, row in df.iterrows():
+        # Open the Broward County Property Appraiser Website and wait for the name field to load
+        driver.get("https://bcpa.net/RecName.asp")
+        try:
+            WebDriverWait(driver, 90).until(EC.presence_of_element_located((By.ID, "Name")))
+        except:
+            print("Website did not load")
+            continue
+        time.sleep(2)
+
+        # Enter the Name into the name field and press entDCer
+        Name = df.at[index, "LastName"] + ", " + df.at[index, "FirstName"]
+        NameField = driver.find_element(By.ID, "Name")
+        NameField.send_keys(Name)
+        NameField.send_keys(Keys.ENTER)
+        time.sleep(3)
+
+        # Check the url to see if the search returned any results
+        if driver.current_url.__contains__("RecSearch.asp"):
+            # If the search returned multiple results, then skip this row
+            print("Multiple Results Found")
+            df = SetNAN(index, df)
+            continue
+        else:
+            # If the Search returned one result, then grab the address
+            try:
+                # Wait for element with class="BodyCopyBold9" to load
+                WebDriverWait(driver, 90).until(EC.presence_of_element_located((By.CLASS_NAME, "BodyCopyBold9")))
+            except:
+                print("Website did not load")
+                df = SetNAN(index, df)
+                continue
+            time.sleep(2)
+
+        # Grab the address from the google maps link
+        Address = driver.find_element(By.CLASS_NAME, "BodyCopyBold9").find_element(By.TAG_NAME, "a").text
+        City = Address.split(",")[1].split("FL")[0]
+        State = Address.split(" ")[-2].split(" ")[0]
+        Zip = Address.split(",")[1].split("FL")[1].split(" ")[1]
+
+        # Remove the extra spaces at the beginning and end of the City, State, and Zip
+        City = City.strip()
+        State = State.strip()
+        Zip = Zip.strip()[0:5]
+
+        # Add to the dataframe
+        df.at[index, "Address"] = Address.split(",")[0]
+        df.at[index, "City"] = City
+        df.at[index, "State"] = State
+        df.at[index, "Zip"] = Zip
+
+
+        # print("Site: " + df.at[index, "Address"] + ", City: " + df.at[index, "City"] + ", State:" + df.at[index, "State"] + ", Zip: " + df.at[index, "Zip"])
+
+        # Grab the Mailing address 2 BodyCopyBold9 elements down
+        MailingAddress = driver.find_elements(By.CLASS_NAME, "BodyCopyBold9")[2].text
+        print("Mailing Address Before Split: " + MailingAddress)
+
+        # Create a struct to hold the Mailing Address, City, State, Zip
+        MailingAddressStruct = SplitMailingAddress(MailingAddress)
+        # print("Mailing Address: " + MailingAddressStruct[0])
+        # print("Mailing City: " + MailingAddressStruct[1])
+        # print("Mailing State: " + MailingAddressStruct[2])
+        # print("Mailing Zip: " + MailingAddressStruct[3])
+        df.at[index, "MailingAddress"] = MailingAddressStruct[0]
+        df.at[index, "MailingCity"] = MailingAddressStruct[1]
+        df.at[index, "MailingState"] = MailingAddressStruct[2]
+        df.at[index, "MailingZip"] = MailingAddressStruct[3]
+    return df
+
+
 
 # Testing the functions
 driver = InitDriver()
-Search(driver, DocTypes["LP"])
-df = Scrape(driver, DocTypes["LP"])
-df = SeparateNames(df)
-df.to_csv("Test.csv", index=False)
-print(df)
+# Search(driver, DocTypes["LP"])
+# df = Scrape(driver, DocTypes["LP"])
+# df = SeparateNames(df)
+# df.to_csv("Test.csv", index=False)
+# print(df)
+df = pd.read_csv("Test.csv")
+df = GetAddress(driver, df)
+df.to_csv("Test1.csv", index=False)
 

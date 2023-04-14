@@ -61,7 +61,6 @@ def InitDriver():
 
 # This function will take a DocType, StartDate, and EndDate and Pull up Search Results for the DocType
 def Search(driver, DocType, StartDate=None, EndDate=None):
-
     # Select the DocType from the dropdown
     dropdown = driver.find_element(By.ID, "DocTypesDisplay-input")
     dropdown.send_keys(Keys.CONTROL + "a")
@@ -116,48 +115,53 @@ def Scrape(driver, DocType):
         else:
             FirstIndirectNameIndex = 3
 
-        # print the indirect name column and append it to the FirstIndirectName list
-        print("IndirectName: " + columns[FirstIndirectNameIndex].text)
-        FirstIndirectName.append(columns[FirstIndirectNameIndex].text)
+        if DocType == "LP" or DocType == "PALIE":
+            # print the indirect name column and append it to the FirstIndirectName list
+            print("IndirectName: " + columns[FirstIndirectNameIndex].text)
+            FirstIndirectName.append(columns[FirstIndirectNameIndex].text)
+        else:
+            print("DirectName: " + columns[FirstIndirectNameIndex-1].text)
+            FirstIndirectName.append(columns[FirstIndirectNameIndex-1].text)
 
         # Open the new window and switch to it
-        row.click()
-        driver.switch_to.window(driver.window_handles[1])
+        if DocType != "DC":
+            row.click()
+            driver.switch_to.window(driver.window_handles[1])
 
-        # Get the DocBlock from the classname "docBlock"
-        NotLoaded = True
-        attempts = 0
-        while NotLoaded:
-            try:
-                WebDriverWait(driver, 60).until(EC.presence_of_element_located((By.CLASS_NAME, "docBlock")))
-                NotLoaded = False
-            except:
-                print("Page Did not load Cannot grab Case Number. Attempting to reopen page")
-                attempts += 1
-                driver.close()
-                driver.switch_to.window(driver.window_handles[0])
-                row.click()
-                driver.switch_to.window(driver.window_handles[1])
-            if attempts > 5:
-                print("Page Did not load Cannot grab Case Number. Skipping")
-                CaseNumber.append(np.nan)
-                break
+            # Get the DocBlock from the classname "docBlock"
+            NotLoaded = True
+            attempts = 0
+            while NotLoaded:
+                try:
+                    WebDriverWait(driver, 60).until(EC.presence_of_element_located((By.CLASS_NAME, "docBlock")))
+                    NotLoaded = False
+                except:
+                    print("Page Did not load Cannot grab Case Number. Attempting to reopen page")
+                    attempts += 1
+                    driver.close()
+                    driver.switch_to.window(driver.window_handles[0])
+                    row.click()
+                    driver.switch_to.window(driver.window_handles[1])
+                if attempts > 5:
+                    print("Page Did not load Cannot grab Case Number. Skipping")
+                    CaseNumber.append(np.nan)
+                    break
 
-        DocBlock = driver.find_element(By.CLASS_NAME, "docBlock")
-        Details = DocBlock.find_elements(By.CLASS_NAME, "detailLabel")
-        ListDocDetails = DocBlock.find_elements(By.CLASS_NAME, "listDocDetails")
+            DocBlock = driver.find_element(By.CLASS_NAME, "docBlock")
+            Details = DocBlock.find_elements(By.CLASS_NAME, "detailLabel")
+            ListDocDetails = DocBlock.find_elements(By.CLASS_NAME, "listDocDetails")
 
-        # Find the Details that has the Text "Case Number:"
-        for Detail in Details:
-            if Detail.text.__contains__("Case Number:"):
-                print("Case Number: " + ListDocDetails[Details.index(Detail)].text)
-                CaseNumber.append(ListDocDetails[Details.index(Detail)].text)
-        time.sleep(2)
+            # Find the Details that has the Text "Case Number:"
+            for Detail in Details:
+                if Detail.text.__contains__("Case Number:"):
+                    print("Case Number: " + ListDocDetails[Details.index(Detail)].text)
+                    CaseNumber.append(ListDocDetails[Details.index(Detail)].text)
+            time.sleep(2)
 
-        # close the new window and switch back to the main window
-        driver.close()
-        driver.switch_to.window(driver.window_handles[0])
-        time.sleep(6)
+            # close the new window and switch back to the main window
+            driver.close()
+            driver.switch_to.window(driver.window_handles[0])
+            time.sleep(6)
 
     # Create a Dataframe from the FirstIndirectName and CaseNumber lists
     df = pd.DataFrame(list(zip(CaseNumber, FirstIndirectName)), columns=["CaseNumber", "FirstIndirectName"])
@@ -215,20 +219,11 @@ def SetNAN(index, df):
 def SplitMailingAddress(mailAddress):
     # Street Types
     StreetTypes = ["ALY", "AVE", "BND", "BLVD", "CSWY", "CIR", "CT", "CV", "DR", "EXT", "HWY", "HOLW", "ISLE", "LN",
-                   "LNDG", "MNR", "MILE", "PARK", "PASS", "PATH", "PL", "PT", "RD", "ROW", "SQ", "ST", "TER", "TWP",
-                   "TRCE", "TRL", "VIEW", "WALK", "WAY"]
-    # City Names
-    CityNames = ["COCONUT CREEK", "COOPER CITY", " CORAL SPRINGS", "DANIA BEACH", "DAVIE", "DEERFIELD BEACH",
-                 "FORT LAUDERDALE", "HALLANDALE BEACH", "HILLSBORO BEACH", "HOLLYWOOD", "LAUDERDALE BY THE SEA",
-                 "LAUDERDALE LAKES", "LAUDERHILL", "LAZY LAKE", "LIGHTHOUST POINT", "MARGATE", "MIRAMAR",
-                 "NORTH LAUDERDALE", "OAKLAND PARK", "PARKLAND", "PEMBROKE PARK", "PEMBROKE PINES", "PLANTATION",
-                 "POMPANO BEACH", "SEA RANCH LAKES", "SOUTHWEST RANCHES", "SUNRISE", "TAMARAC", "UNINCORPORATED",
-                 "WEST PARK", "WILTON MANORS"]
+                   "LNDG", "MNR", "MILE", "PASS", "PATH", "PL", "PT", "ROAD", "ROW", "SQ", "ST", "TER", "TWP","TRCE",
+                   "TRL", "VIEW", "WALK", "WAY", "RD", "PARK"]
 
     # Create the Variables to hold the Mailing Address, City
     MailingAddr = ""
-    UnitNumber = ""
-    City = ""
     Remaining = ""
 
     # Split the mailing address after an occurance of StreetTypes
@@ -244,32 +239,32 @@ def SplitMailingAddress(mailAddress):
     # Unit Numbers are optional but would be at the Beginning of the Remaining string
     # If there is a unit number, then the first part of the address is the unit number and the second part of the address is the rest of the address
     # If there is no unit number, then the first part of the address is the rest of the address and the second part of the address is empty
-    if re.search(r"UNIT \d+", Remaining):
-        UnitNumber = re.search(r"UNIT \d+", Remaining).group(0)
+    if re.search(r"UNIT \d{1,4}", Remaining):
+        UnitNumber = re.search(r"UNIT \d{1,4}", Remaining).group(0)
         MailingAddr = MailingAddr + " " + UnitNumber
         Remaining = Remaining.split(UnitNumber)[1]
-    elif re.search(r"#\d+", Remaining):
-        UnitNumber = re.search(r"\d+", Remaining).group(0)
-        MailingAddr = MailingAddr + " #" + UnitNumber
+    elif re.search(r"#\d{1,4}[A-Z]", Remaining):
+        UnitNumber = re.search(r"#\d{1,4}[A-Z]", Remaining).group(0)
+        MailingAddr = MailingAddr + " " + UnitNumber
         Remaining = Remaining.split(UnitNumber)[1]
-    elif re.search(r"#\d+[A-Z]", Remaining):
-        UnitNumber = re.search(r"#\d+[A-Z]", Remaining).group(0)
-        MailingAddr = MailingAddr + " #" + UnitNumber
+    elif re.search(r"#\d{1,5}", Remaining):
+        UnitNumber = re.search(r"\d{1,5}", Remaining).group(0)
+        MailingAddr = MailingAddr + " " + UnitNumber
+        Remaining = Remaining.split(UnitNumber)[1]
+    elif re.search(r"#[A-Z]-\d{1,4}", Remaining):
+        UnitNumber = re.search(r"#[A-Z]-\d{1,4}", Remaining).group(0)
+        MailingAddr = MailingAddr + " " + UnitNumber
         Remaining = Remaining.split(UnitNumber)[1]
     else:
         Remaining = Remaining
+    # print("Remaining: " + Remaining)
 
-    # use City Names to find the City in the Remaining string
-    for cityName in CityNames:
-        if Remaining.__contains__(cityName):
-            City = cityName
-            Remaining = Remaining.split(cityName)[1]
-            break
-
-    # The Remaining String should now only contain the State and Zip Code
+    # Split the Remaining into City, State, and Zip
     State = Remaining.split(" ")[-2]
     Zip = Remaining.split(" ")[-1]
     Zip = Zip[0:5]
+    City = Remaining.split(State)[0]
+    # print("City: " + City)
 
     # Return the Mailing Address, Unit Number, City, State, Zip
     return MailingAddr, City, State, Zip
@@ -314,7 +309,7 @@ def GetAddress(driver, df):
         # Check the url to see if the search returned any results
         if driver.current_url.__contains__("RecSearch.asp"):
             # If the search returned multiple results, then skip this row
-            print("Multiple Results Found")
+            print("Multiple Results Found/No Results Found")
             df = SetNAN(index, df)
             continue
         else:
@@ -345,9 +340,6 @@ def GetAddress(driver, df):
         df.at[index, "State"] = State
         df.at[index, "Zip"] = Zip
 
-
-        # print("Site: " + df.at[index, "Address"] + ", City: " + df.at[index, "City"] + ", State:" + df.at[index, "State"] + ", Zip: " + df.at[index, "Zip"])
-
         # Grab the Mailing address 2 BodyCopyBold9 elements down
         MailingAddress = driver.find_elements(By.CLASS_NAME, "BodyCopyBold9")[2].text
         # print("Mailing Address Before Split: " + MailingAddress)
@@ -366,7 +358,7 @@ def GetAddress(driver, df):
         # Grab the Just Market Value, Taxes, Bed, Bath, SqFt
         # The Just Market Value is at the 49th td element
         JustMarketValue = driver.find_elements(By.TAG_NAME, "td")[47].text
-        print("Just Market Value: " + JustMarketValue)
+        # print("Just Market Value: " + JustMarketValue)
         df.at[index, "JustMarketValue"] = JustMarketValue
 
         # Weird check to see if current year has tax info
@@ -378,37 +370,45 @@ def GetAddress(driver, df):
         except:
             Taxes = driver.find_elements(By.TAG_NAME, "td")[55].text
 
-        print("Taxes: " + Taxes)
+        # print("Taxes: " + Taxes)
         df.at[index, "Taxes"] = Taxes
 
         BedBath = driver.find_elements(By.TAG_NAME, "td")[160].text
+        if BedBath.__contains__("its"):
+            BedBath = driver.find_elements(By.TAG_NAME, "td")[161].text
         if BedBath.__contains__("/"):
             # remove the first 2 characters from the string and split the string by "/"
             Bed = BedBath[2:].split("/")[0]
             Bath = BedBath[2:].split("/")[1]
-            print("Bed: " + Bed)
-            print("Bath: " + Bath)
+            # print("Bed: " + Bed)
+            # print("Bath: " + Bath)
             df.at[index, "Bed"] = Bed
             df.at[index, "Bath"] = Bath
         else:
             df.at[index, "Bed"] = np.nan
             df.at[index, "Bath"] = np.nan
 
-        print("SqFt: " + driver.find_elements(By.TAG_NAME, "td")[158].text)
-        df.at[index, "SqFt"] = driver.find_elements(By.TAG_NAME, "td")[158].text
+        SqFt = driver.find_elements(By.TAG_NAME, "td")[158].text
+        if SqFt.__contains__("Adj. Bldg. S.F."):
+            SqFt = driver.find_elements(By.TAG_NAME, "td")[159].text
+        # print("SqFt: " + SqFt)
+        df.at[index, "SqFt"] = SqFt
     return df
 
 
 # Testing the functions
 driver = InitDriver()
-# Search(driver, DocTypes["LP"])
-# df = Scrape(driver, DocTypes["LP"])
+# Search(driver, DocTypes["PRO"])
+# df = Scrape(driver, DocTypes["PRO"])
 # df = SeparateNames(df)
-# df.to_csv("Test.csv", index=False)
+# df.to_csv("Test2.csv", index=False)
 # print(df)
-df = pd.read_csv("Test.csv")
+df = pd.read_csv("Test2.csv")
 df = GetAddress(driver, df)
 # Drop any row with a NAN value in the address column
 df = df.dropna(subset=["Address"])
-df.to_csv("Test1.csv", index=False)
+# If there are no company names then drop the column from the dataframe
+if df["CompanyName"].isnull().all():
+    df = df.drop(columns=["CompanyName"])
+df.to_csv("Test3.csv", index=False)
 

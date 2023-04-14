@@ -8,6 +8,8 @@ import os
 import re
 import time
 import datetime
+
+import numpy as np
 import pandas as pd
 from selenium import webdriver
 from selenium.webdriver import Keys
@@ -91,7 +93,7 @@ def Search(driver, DocType, StartDate=None, EndDate=None):
 
 # This Function will Scrape the Search Results and return a dataframe
 def Scrape(driver, DocType):
-    # Traverse the table and get the First Inderect Name column
+    # Traverse the table and get the First Indirect Name column
     try:
         WebDriverWait(driver, 90).until(EC.presence_of_element_located((By.ID, "SearchGridContainer")))
     except:
@@ -138,7 +140,7 @@ def Scrape(driver, DocType):
                 driver.switch_to.window(driver.window_handles[1])
             if attempts > 5:
                 print("Page Did not load Cannot grab Case Number. Skipping")
-                CaseNumber.append("NAN")
+                CaseNumber.append(np.nan)
                 break
 
         DocBlock = driver.find_element(By.CLASS_NAME, "docBlock")
@@ -182,10 +184,10 @@ def SeparateNames(df):
         if "," in row["FirstIndirectName"]:
             df.at[index, "FirstName"] = row["FirstIndirectName"].split(",")[1].split(" ")[0]
             df.at[index, "LastName"] = row["FirstIndirectName"].split(",")[0]
-            df.at[index, "FirstIndirectName"] = "NAN"
+            df.at[index, "FirstIndirectName"] = np.nan
         else:
-            df.at[index, "FirstName"] = "NAN"
-            df.at[index, "LastName"] = "NAN"
+            df.at[index, "FirstName"] = np.nan
+            df.at[index, "LastName"] = np.nan
 
     # Rename FirstIndirectName to CompanyName
     df = df.rename(columns={"FirstIndirectName": "CompanyName"})
@@ -193,19 +195,19 @@ def SeparateNames(df):
 
 # Sets row to NAN if needed.
 def SetNAN(index, df):
-    df.at[index, "Address"] = "NAN"
-    df.at[index, "City"] = "NAN"
-    df.at[index, "State"] = "NAN"
-    df.at[index, "Zip"] = "NAN"
-    df.at[index, "MailingAddress"] = "NAN"
-    df.at[index, "MailingCity"] = "NAN"
-    df.at[index, "MailingState"] = "NAN"
-    df.at[index, "MailingZip"] = "NAN"
-    df.at[index, "JustMarketValue"] = "NAN"
-    df.at[index, "Taxes"] = "NAN"
-    df.at[index, "Bed"] = "NAN"
-    df.at[index, "Bath"] = "NAN"
-    df.at[index, "SqFt"] = "NAN"
+    df.at[index, "Address"] = np.nan
+    df.at[index, "City"] = np.nan
+    df.at[index, "State"] = np.nan
+    df.at[index, "Zip"] = np.nan
+    df.at[index, "MailingAddress"] = np.nan
+    df.at[index, "MailingCity"] = np.nan
+    df.at[index, "MailingState"] = np.nan
+    df.at[index, "MailingZip"] = np.nan
+    df.at[index, "JustMarketValue"] = np.nan
+    df.at[index, "Taxes"] = np.nan
+    df.at[index, "Bed"] = np.nan
+    df.at[index, "Bath"] = np.nan
+    df.at[index, "SqFt"] = np.nan
     return df
 
 
@@ -348,7 +350,7 @@ def GetAddress(driver, df):
 
         # Grab the Mailing address 2 BodyCopyBold9 elements down
         MailingAddress = driver.find_elements(By.CLASS_NAME, "BodyCopyBold9")[2].text
-        print("Mailing Address Before Split: " + MailingAddress)
+        # print("Mailing Address Before Split: " + MailingAddress)
 
         # Create a struct to hold the Mailing Address, City, State, Zip
         MailingAddressStruct = SplitMailingAddress(MailingAddress)
@@ -360,8 +362,41 @@ def GetAddress(driver, df):
         df.at[index, "MailingCity"] = MailingAddressStruct[1]
         df.at[index, "MailingState"] = MailingAddressStruct[2]
         df.at[index, "MailingZip"] = MailingAddressStruct[3]
-    return df
 
+        # Grab the Just Market Value, Taxes, Bed, Bath, SqFt
+        # The Just Market Value is at the 49th td element
+        JustMarketValue = driver.find_elements(By.TAG_NAME, "td")[47].text
+        print("Just Market Value: " + JustMarketValue)
+        df.at[index, "JustMarketValue"] = JustMarketValue
+
+        # Weird check to see if current year has tax info
+        try:
+            Taxes = driver.find_elements(By.TAG_NAME, "td")[49].text
+            # find if the string contains a $ sign
+            if Taxes.__contains__(" "):
+                Taxes = driver.find_elements(By.TAG_NAME, "td")[55].text
+        except:
+            Taxes = driver.find_elements(By.TAG_NAME, "td")[55].text
+
+        print("Taxes: " + Taxes)
+        df.at[index, "Taxes"] = Taxes
+
+        BedBath = driver.find_elements(By.TAG_NAME, "td")[160].text
+        if BedBath.__contains__("/"):
+            # remove the first 2 characters from the string and split the string by "/"
+            Bed = BedBath[2:].split("/")[0]
+            Bath = BedBath[2:].split("/")[1]
+            print("Bed: " + Bed)
+            print("Bath: " + Bath)
+            df.at[index, "Bed"] = Bed
+            df.at[index, "Bath"] = Bath
+        else:
+            df.at[index, "Bed"] = np.nan
+            df.at[index, "Bath"] = np.nan
+
+        print("SqFt: " + driver.find_elements(By.TAG_NAME, "td")[158].text)
+        df.at[index, "SqFt"] = driver.find_elements(By.TAG_NAME, "td")[158].text
+    return df
 
 
 # Testing the functions
@@ -373,5 +408,7 @@ driver = InitDriver()
 # print(df)
 df = pd.read_csv("Test.csv")
 df = GetAddress(driver, df)
+# Drop any row with a NAN value in the address column
+df = df.dropna(subset=["Address"])
 df.to_csv("Test1.csv", index=False)
 

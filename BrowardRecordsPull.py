@@ -502,8 +502,8 @@ def Run(CurrentDocType, StartDate=None, EndDate=None):
     return print("Finished Scraping " + str(DocTypes[CurrentDocType]))
 
 
-Run("DC")
-time.sleep(2)
+# Run("DC")
+# time.sleep(2)
 # Run("LP", "04/13/2023", "04/14/2023")
 # time.sleep(5)
 # Run("PRO", "04/13/2023", "04/14/2023")

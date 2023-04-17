@@ -93,7 +93,9 @@ def GetRecords(driver, DocType, StartDate: str = None, EndDate: str = None):
     # Click the Search button with ID "btnNameSearch"
     SearchButton = driver.find_element(By.ID, "btnNameSearch")
     SearchButton.click()
-    time.sleep(500)
+    time.sleep(5)
+
+    return 0
 
 
 driver = InitDriver()

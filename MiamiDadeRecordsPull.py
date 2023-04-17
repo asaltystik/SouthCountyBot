@@ -7,7 +7,7 @@ import re
 import sys
 import time
 import datetime
-import BrowardRecordsPull
+import SetDates
 import numpy as np
 import pandas as pd
 from selenium import webdriver
@@ -27,11 +27,11 @@ DocTypes = {
 }
 
 def GetDates():
-    StartDate, EndDate = BrowardRecordsPull.GetDates()
+    StartDate, EndDate = SetDates.GetDates()
     return StartDate, EndDate
 
 def NoDates():
-    StartDate, EndDate = BrowardRecordsPull.NoDates()
+    StartDate, EndDate = SetDates.NoDates()
     return StartDate, EndDate
 
 def InitDriver():
@@ -62,7 +62,7 @@ def GetRecords(driver, DocType, StartDate: str = None, EndDate: str = None):
     time.sleep(5)
 
 
-    driver.get("https://onlineservices.miamidadeclerk.gov/officialrecords/StandardSearch.aspx")
+    driver.get("https://onlineservices.4-4miamidadeclerk.gov/officialrecords/StandardSearch.aspx")
     time.sleep(5)
 
     # if StartDate and EndDate are not None, then we need to enter them into the search
@@ -93,7 +93,7 @@ def GetRecords(driver, DocType, StartDate: str = None, EndDate: str = None):
     # Click the Search button with ID "btnNameSearch"
     SearchButton = driver.find_element(By.ID, "btnNameSearch")
     SearchButton.click()
-    time.sleep(5)
+    time.sleep(500)
 
 
 driver = InitDriver()

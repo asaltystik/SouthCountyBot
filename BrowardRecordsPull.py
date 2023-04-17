@@ -11,6 +11,7 @@ import time
 import datetime
 import numpy as np
 import pandas as pd
+import SetDates
 from selenium import webdriver
 from selenium.webdriver import Keys
 from selenium.webdriver.common.by import By
@@ -26,26 +27,6 @@ DocTypes = {
     "PRO": "Probate (PRO)",
     "PALIE": "Property Tax Lien (PALIE)"
 }
-
-# This function will take inputs for the start date and end date and return both varibles
-def GetDates():
-    # Get the Start Date
-    print("Enter the Start Date for the ")
-    StartDate: str = input("Start Date needs to be in the format of MM/DD/YYYY: ")
-    print("Enter the End Date for the ")
-    EndDate: str = input("End Date needs to be in the format of MM/DD/YYYY: ")
-    return StartDate, EndDate
-
-# This Function will handle if there is no inputs for StartDate and EndDate and return the default values
-def NoDates():
-    # Set the StartDate to yesterday and the EndDate to the day before yesterday
-    Yesterday = datetime.date.today() - datetime.timedelta(days=1)
-    DayBeforeYesterDay = datetime.date.today() - datetime.timedelta(days=2)
-
-    # Convert the dates to strings
-    StartDate = DayBeforeYesterDay.strftime("%m/%d/%Y")
-    EndDate = Yesterday.strftime("%m/%d/%Y")
-    return StartDate, EndDate
 
 # This function will Initialize the Chrome Driver and return it
 def InitDriver():
@@ -81,7 +62,7 @@ def Search(driver, DocType, StartDate=None, EndDate=None):
 
     # If there is no StartDate or EndDate, use the default values
     if StartDate is None or EndDate is None:
-        StartDate, EndDate = NoDates()
+        StartDate, EndDate = SetDates.NoDates()
 
     # Select the EndDateField
     EndDateField = driver.find_element(By.ID, "RecordDateTo")
@@ -521,8 +502,8 @@ def Run(CurrentDocType, StartDate=None, EndDate=None):
     return print("Finished Scraping " + str(DocTypes[CurrentDocType]))
 
 
-# Run("DC", "04/13/2023", "04/14/2023")
-# time.sleep(2)
+Run("DC")
+time.sleep(2)
 # Run("LP", "04/13/2023", "04/14/2023")
 # time.sleep(5)
 # Run("PRO", "04/13/2023", "04/14/2023")

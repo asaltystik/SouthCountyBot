@@ -6,9 +6,9 @@
 # Import the necessary modules
 import os
 import re
+import sys
 import time
 import datetime
-
 import numpy as np
 import pandas as pd
 from selenium import webdriver
@@ -38,24 +38,29 @@ def GetDates():
 
 # This Function will handle if there is no inputs for StartDate and EndDate and return the default values
 def NoDates():
-    # Set the StartDate to yesterday and the EndDate to today
+    # Set the StartDate to yesterday and the EndDate to the day before yesterday
     Yesterday = datetime.date.today() - datetime.timedelta(days=1)
-    Today = datetime.date.today()
+    DayBeforeYesterDay = datetime.date.today() - datetime.timedelta(days=2)
 
     # Convert the dates to strings
-    StartDate = Yesterday.strftime("%m/%d/%Y")
-    EndDate = Today.strftime("%m/%d/%Y")
+    StartDate = DayBeforeYesterDay.strftime("%m/%d/%Y")
+    EndDate = Yesterday.strftime("%m/%d/%Y")
     return StartDate, EndDate
 
 # This function will Initialize the Chrome Driver and return it
 def InitDriver():
     # Create an Undetectable Chrome Driver
-    driver = uc.Chrome()
+    options = uc.ChromeOptions()
+    options.add_argument("--disable-blink-features=AutomationControlled")
+    options.add_argument(
+        "user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3")
+    driver = uc.Chrome(options=options)
     driver.get("https://google.com")
     time.sleep(2)
     driver.get("https://officialrecords.broward.org/AcclaimWeb/search/SearchTypeDocType")
+    time.sleep(5)
     driver.find_element(By.ID, "btnButton").click()
-    time.sleep(2)
+    time.sleep(5)
     return driver
 
 
@@ -63,9 +68,15 @@ def InitDriver():
 def Search(driver, DocType, StartDate=None, EndDate=None):
     # Select the DocType from the dropdown
     dropdown = driver.find_element(By.ID, "DocTypesDisplay-input")
+    time.sleep(2)
     dropdown.send_keys(Keys.CONTROL + "a")
+    time.sleep(1)
     dropdown.send_keys(Keys.DELETE)
-    dropdown.send_keys(DocType)
+    time.sleep(1)
+    # Enter the Doctype one character at a time
+    for char in DocType:
+        dropdown.send_keys(char)
+        time.sleep(1)
     time.sleep(4)
 
     # If there is no StartDate or EndDate, use the default values
@@ -74,19 +85,35 @@ def Search(driver, DocType, StartDate=None, EndDate=None):
 
     # Select the EndDateField
     EndDateField = driver.find_element(By.ID, "RecordDateTo")
+    time.sleep(2)
     EndDateField.click()
+    time.sleep(2)
     EndDateField.send_keys(Keys.CONTROL + "a")
+    time.sleep(2)
     EndDateField.send_keys(Keys.DELETE)
-    EndDateField.send_keys(EndDate)
+    time.sleep(2)
+    # Enter the EndDate one character at a time
+    for char in EndDate:
+        EndDateField.send_keys(char)
+        time.sleep(1)
     time.sleep(4)
 
     # Select the StartDateField
     StartDateField = driver.find_element(By.ID, "RecordDateFrom")
+    time.sleep(2)
     StartDateField.click()
+    time.sleep(2)
     StartDateField.send_keys(Keys.CONTROL + "a")
+    time.sleep(2)
     StartDateField.send_keys(Keys.DELETE)
-    StartDateField.send_keys(StartDate)
+    time.sleep(2)
+    # Enter the StartDate one character at a time
+    for char in StartDate:
+        StartDateField.send_keys(char)
+        time.sleep(1)
+    time.sleep(2)
     StartDateField.send_keys(Keys.ENTER)
+    time.sleep(2)
 
     return 0
 
@@ -99,70 +126,96 @@ def Scrape(driver, DocType):
         print("No Results Found")
         return None
     time.sleep(2)
-    table = driver.find_element(By.ID, "SearchGridContainer")
-    rows = table.find_elements(By.TAG_NAME, "tr")
-    FirstIndirectName = []
-    FirstIndirectNameIndex: int
+    # Grab the Number of rows from class "t-status-text"
+    NumRows = driver.find_element(By.CLASS_NAME, "t-status-text").text.split(" ")[-1]
+    print("Number of Rows: " + NumRows)
+
+    # Divide the number of rows by 100 to get the number of pages. Then round up to the next hundred
+    NumPages = int(np.ceil(int(NumRows) / 100))
+    print("Number of Pages: " + str(NumPages))
+
     CaseNumber = []
-    for row in rows:
-        columns = row.find_elements(By.TAG_NAME, "td")
-        # for the first row, we need to find the column index for the First Indirect Name column, count the number of newlines in the row till we get to the column with First Indirect Name
-        if row.text.__contains__("Cart\nConsideration\nFirst Direct Name\nFirst Indirect Name"):
-            # Find the Number of Newlines are before First Indirect Name
-            FirstIndirectNameIndex = row.text.count("\n", 0, row.text.index("First Indirect Name"))
-            print("Found Indirect Name Index at pos: " + str(FirstIndirectNameIndex))
-            continue
-        else:
-            FirstIndirectNameIndex = 3
+    FirstIndirectName = []
+    # for the number of pages loop through the pages
+    for i in range(NumPages):
+        time.sleep(2)
+        print("Page: " + str(i+1))
+        table = driver.find_element(By.ID, "SearchGridContainer")
+        rows = table.find_elements(By.TAG_NAME, "tr")
+        FirstIndirectNameIndex: int
+        for row in rows:
+            columns = row.find_elements(By.TAG_NAME, "td")
+            # for the first row, we need to find the column index for the First Indirect Name column, count the number of newlines in the row till we get to the column with First Indirect Name
+            if row.text.__contains__("Cart\nConsideration\nFirst Direct Name\nFirst Indirect Name"):
+                # Find the Number of Newlines are before First Indirect Name
+                FirstIndirectNameIndex = row.text.count("\n", 0, row.text.index("First Indirect Name"))
+                # print("Found Indirect Name Index at pos: " + str(FirstIndirectNameIndex))
+                continue
+            else:
+                FirstIndirectNameIndex = 3
 
-        if DocType == "LP" or DocType == "PALIE":
-            # print the indirect name column and append it to the FirstIndirectName list
-            print("IndirectName: " + columns[FirstIndirectNameIndex].text)
-            FirstIndirectName.append(columns[FirstIndirectNameIndex].text)
-        else:
-            print("DirectName: " + columns[FirstIndirectNameIndex-1].text)
-            FirstIndirectName.append(columns[FirstIndirectNameIndex-1].text)
+            if DocType == DocTypes["LP"] or DocType == DocTypes["PALIE"]:
+                # print the indirect name column and append it to the FirstIndirectName list
+                print("IndirectName: " + columns[FirstIndirectNameIndex].text)
+                FirstIndirectName.append(columns[FirstIndirectNameIndex].text)
+            else:
+                print("DirectName: " + columns[FirstIndirectNameIndex-1].text)
+                FirstIndirectName.append(columns[FirstIndirectNameIndex-1].text)
 
-        # Open the new window and switch to it
-        if DocType != "DC":
-            row.click()
-            driver.switch_to.window(driver.window_handles[1])
+            # If the DocType is not a Death Certificate or a Property Tax Lien, we need to get the Case Number
+            if DocType is DocTypes["DC"] or DocType is DocTypes["PALIE"]:
+                CaseNumber.append(np.nan)
+            else:
+                time.sleep(2)
+                row.click()
+                driver.switch_to.window(driver.window_handles[1])
 
-            # Get the DocBlock from the classname "docBlock"
-            NotLoaded = True
-            attempts = 0
-            while NotLoaded:
-                try:
-                    WebDriverWait(driver, 60).until(EC.presence_of_element_located((By.CLASS_NAME, "docBlock")))
-                    NotLoaded = False
-                except:
-                    print("Page Did not load Cannot grab Case Number. Attempting to reopen page")
-                    attempts += 1
-                    driver.close()
-                    driver.switch_to.window(driver.window_handles[0])
-                    row.click()
-                    driver.switch_to.window(driver.window_handles[1])
-                if attempts > 5:
-                    print("Page Did not load Cannot grab Case Number. Skipping")
+                # Get the DocBlock from the classname "docBlock"
+                NotLoaded = True
+                attempts = 0
+                while NotLoaded:
+                    try:
+                        WebDriverWait(driver, 60).until(EC.presence_of_element_located((By.CLASS_NAME, "docBlock")))
+                        NotLoaded = False
+                    except:
+                        print("Page Did not load Cannot grab Case Number. Attempting to reopen page")
+                        attempts += 1
+                        driver.close()
+                        driver.switch_to.window(driver.window_handles[0])
+                        row.click()
+                        driver.switch_to.window(driver.window_handles[1])
+                    if attempts > 5:
+                        print("Page Did not load Cannot grab Case Number. Skipping")
+                        CaseNumber.append(np.nan)
+                        break
+                time.sleep(2)
+
+                DocBlock = driver.find_element(By.CLASS_NAME, "docBlock")
+                Details = DocBlock.find_elements(By.CLASS_NAME, "detailLabel")
+                ListDocDetails = DocBlock.find_elements(By.CLASS_NAME, "listDocDetails")
+
+                # Find the Details that has the Text "Case Number:"
+                for Detail in Details:
+                    if Detail.text.__contains__("Case Number:"):
+                        print("Case Number: " + ListDocDetails[Details.index(Detail)].text)
+                        CaseNumber.append(ListDocDetails[Details.index(Detail)].text)
+                # If a case number was not found, append a NaN
+                if len(CaseNumber) < len(FirstIndirectName):
+                    print("No Case Number Found")
                     CaseNumber.append(np.nan)
-                    break
 
-            DocBlock = driver.find_element(By.CLASS_NAME, "docBlock")
-            Details = DocBlock.find_elements(By.CLASS_NAME, "detailLabel")
-            ListDocDetails = DocBlock.find_elements(By.CLASS_NAME, "listDocDetails")
-
-            # Find the Details that has the Text "Case Number:"
-            for Detail in Details:
-                if Detail.text.__contains__("Case Number:"):
-                    print("Case Number: " + ListDocDetails[Details.index(Detail)].text)
-                    CaseNumber.append(ListDocDetails[Details.index(Detail)].text)
-            time.sleep(2)
-
-            # close the new window and switch back to the main window
-            driver.close()
-            driver.switch_to.window(driver.window_handles[0])
+                # close the new window and switch back to the main window
+                driver.close()
+                driver.switch_to.window(driver.window_handles[0])
+                time.sleep(6)
+        # Click the t-icon t-arrow-next button
+        if i < NumPages:
+            print("Clicking Next Button")
+            driver.find_element(By.CLASS_NAME, "t-icon.t-arrow-next").click()
             time.sleep(6)
 
+    # print the list of case numbers
+    print(CaseNumber)
     # Create a Dataframe from the FirstIndirectName and CaseNumber lists
     df = pd.DataFrame(list(zip(CaseNumber, FirstIndirectName)), columns=["CaseNumber", "FirstIndirectName"])
 
@@ -177,22 +230,25 @@ def Scrape(driver, DocType):
 # This Function will take a dataframe and separate the First Indirect name column into First Name and Last Name columns
 # and return the new dataframe
 def SeparateNames(df):
-    # Create the First Name and Last Name columns
-    df["FirstName"] = ""
-    df["LastName"] = ""
+    # Create new columns for First Name and Last Name
+    FirstName = []
+    LastName = []
 
     # if the FirstIndirectName column has a comma, then the First Name is the Word after the comma and before the space
     # and the Last Name is the word at the beginning of the string
     # loop through the dataframe and fill the First Name and Last Name columns
     for index, row in df.iterrows():
         if "," in row["FirstIndirectName"]:
-            df.at[index, "FirstName"] = row["FirstIndirectName"].split(",")[1].split(" ")[0]
-            df.at[index, "LastName"] = row["FirstIndirectName"].split(",")[0]
+            FirstName.append(row["FirstIndirectName"].split(",")[1].split(" ")[0])
+            LastName.append(row["FirstIndirectName"].split(",")[0])
             df.at[index, "FirstIndirectName"] = np.nan
         else:
-            df.at[index, "FirstName"] = np.nan
-            df.at[index, "LastName"] = np.nan
+            FirstName.append(np.nan)
+            LastName.append(np.nan)
 
+    # Create new columns for First Name and Last Name and use the lists we created earlier
+    df["FirstName"] = FirstName
+    df["LastName"] = LastName
     # Rename FirstIndirectName to CompanyName
     df = df.rename(columns={"FirstIndirectName": "CompanyName"})
     return df
@@ -218,15 +274,15 @@ def SetNAN(index, df):
 # This Function will Split a Mailing Address into house number, street direction, street name, street type, unit number (if applicable), City, State, Zip
 def SplitMailingAddress(mailAddress):
     # Street Types
-    StreetTypes = ["ALY", "AVE", "BND", "BLVD", "CSWY", "CIR", "CT", "CV", "DR", "EXT", "HWY", "HOLW", "ISLE", "LN",
+    StreetTypes = ["ALY", "AVE", "BND", "BLVD", "CSWY", "CIR", "CT", "CV", "DRIVE", "EXT", "HWY", "HOLW", "ISLE", "LN",
                    "LNDG", "MNR", "MILE", "PASS", "PATH", "PL", "PT", "ROAD", "ROW", "SQ", "ST", "TER", "TWP","TRCE",
-                   "TRL", "VIEW", "WALK", "WAY", "RD", "PARK"]
+                   "TRL", "VIEW", "WALK", "WAY", "RD", "PARK", "COURT", "DR"]
 
     # Create the Variables to hold the Mailing Address, City
     MailingAddr = ""
     Remaining = ""
 
-    # Split the mailing address after an occurance of StreetTypes
+    # Split the mailing address after an occurrence of StreetTypes
     for streetType in StreetTypes:
         if mailAddress.__contains__(streetType):
             # Need a Variable to hold the first part of the address which is just after the Street Type
@@ -260,11 +316,19 @@ def SplitMailingAddress(mailAddress):
     # print("Remaining: " + Remaining)
 
     # Split the Remaining into City, State, and Zip
-    State = Remaining.split(" ")[-2]
-    Zip = Remaining.split(" ")[-1]
-    Zip = Zip[0:5]
-    City = Remaining.split(State)[0]
-    # print("City: " + City)
+    try:
+        State = Remaining.split(" ")[-2]
+        Zip = Remaining.split(" ")[-1]
+        Zip = Zip[0:5]
+        City = Remaining.split(State)[0]
+        # print("City: " + City)
+    except:
+        City = ""
+        State = ""
+        Zip = ""
+        # Print the error
+        print("Exception: " + Remaining)
+        print("error" + str(sys.exc_info()[0]))
 
     # Return the Mailing Address, Unit Number, City, State, Zip
     return MailingAddr, City, State, Zip
@@ -300,11 +364,18 @@ def GetAddress(driver, df):
         time.sleep(2)
 
         # Enter the Name into the name field and press entDCer
-        Name = df.at[index, "LastName"] + ", " + df.at[index, "FirstName"]
-        NameField = driver.find_element(By.ID, "Name")
-        NameField.send_keys(Name)
-        NameField.send_keys(Keys.ENTER)
-        time.sleep(3)
+        try:
+            Name = df.at[index, "LastName"] + ", " + df.at[index, "FirstName"]
+            NameField = driver.find_element(By.ID, "Name")
+            NameField.send_keys(Name)
+            NameField.send_keys(Keys.ENTER)
+            time.sleep(3)
+        except:
+            # print the error and skip this row
+            print("Error: " + str(sys.exc_info()[0]))
+            df = SetNAN(index, df)
+            df.at[index, "CompanyName"] = np.nan
+            continue
 
         # Check the url to see if the search returned any results
         if driver.current_url.__contains__("RecSearch.asp"):
@@ -397,18 +468,63 @@ def GetAddress(driver, df):
 
 
 # Testing the functions
-driver = InitDriver()
-# Search(driver, DocTypes["PRO"])
-# df = Scrape(driver, DocTypes["PRO"])
-# df = SeparateNames(df)
-# df.to_csv("Test2.csv", index=False)
-# print(df)
-df = pd.read_csv("Test2.csv")
-df = GetAddress(driver, df)
-# Drop any row with a NAN value in the address column
-df = df.dropna(subset=["Address"])
-# If there are no company names then drop the column from the dataframe
-if df["CompanyName"].isnull().all():
-    df = df.drop(columns=["CompanyName"])
-df.to_csv("Test3.csv", index=False)
+def Run(CurrentDocType, StartDate=None, EndDate=None):
+    # Init the Driver
+    driver = InitDriver()
 
+    # Search for the document type and scrape the results
+    Search(driver, DocTypes[CurrentDocType], StartDate, EndDate)
+    df = Scrape(driver, DocTypes[CurrentDocType])
+    print(df)
+
+    # Separate the Names
+    df = SeparateNames(df)
+
+    # Temporarily save the dataframe to a csv file
+    # SaveTo = "Pre-" + str(CurrentDocType) + ".csv"
+    # df.to_csv(SaveTo, index=False)
+    print(df)
+
+    # Read the csv file back into a dataframe and call the GetAddress function
+    df = GetAddress(driver, df)
+
+    # Drop any row with a NAN value in the address column
+    df = df.dropna(subset=["Address"])
+
+    # If there are no company names then drop the column from the dataframe
+    if df["CompanyName"].isnull().all():
+        df = df.drop(columns=["CompanyName"])
+
+    # If there are no CaseNumbers then drop the column from the dataframe
+    if df["CaseNumber"].isnull().all():
+        df = df.drop(columns=["CaseNumber"])
+
+    # If there is no Mailing City or Mailing Zip then drop the row
+
+    # Add Date and Save
+    if StartDate is None or EndDate is None:
+        print("No StartDate or EndDate given")
+        Yesterday = datetime.datetime.now() - datetime.timedelta(days=1)
+        # make yesterday's date a string and replace the slashes with dashes
+        Yesterday = str(Yesterday).split(" ")[0].replace("/", "-")
+        SaveTo = str(DocTypes[CurrentDocType]) + str(Yesterday) + ".csv"
+        print(SaveTo)
+    else:
+        print("Saving as yesterday")
+        # Make StartDate a string and replace the slashes with dashes
+        EndDate = str(EndDate).split(" ")[0].replace("/", "-")
+        SaveTo = str(DocTypes[CurrentDocType]) + "-" + str(EndDate) + ".csv"
+        print(SaveTo)
+
+    df.to_csv(SaveTo, index=False)
+    driver.quit()
+    return print("Finished Scraping " + str(DocTypes[CurrentDocType]))
+
+
+# Run("DC", "04/13/2023", "04/14/2023")
+# time.sleep(2)
+# Run("LP", "04/13/2023", "04/14/2023")
+# time.sleep(5)
+# Run("PRO", "04/13/2023", "04/14/2023")
+# time.sleep(5)
+# Run("PALIE", "03/01/2023", "04/14/2023")

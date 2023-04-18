@@ -1,6 +1,6 @@
 # This file was written by: Carick Brandt on 4/2023
 # This file will pull records from the Miami-Dade County Clerks website and run them against the property appraiser's website
-
+import math
 # Import the necessary libraries
 import os
 import re
@@ -57,24 +57,82 @@ def SplitParties(df):
         # Split the First Half of the String by the ")  " delimiter
         Party = row["First Party (Code)  Second Party (Code)"].split(")  ")[0]
 
-        # Check if there is a D in the "()"
-        if "(D" in Party:
-            Party = Party.split("(D")[0]
+        # if Misc Ref is "WILL" then we skip the row
+        if row["Misc Ref"] == "WILL":
+            df.at[index, "First Party (Code)  Second Party (Code)"] = np.nan
+            continue
+
+        # Split the string by the " (" delimiter
+        Party = Party.split(" (")[0]
+        # print("Party:", Party)
+
+        # Count the number of spaces in the string
+        Spaces = Party.count(" ")
+        # print("Spaces:", Spaces)
+        # print("is Spaces <=2:", int(Spaces) <= 2)
+        # if there are at most 3 spaces before the first " (" then we only keep that part of the string
+        if int(Spaces) <= 2:
+            # print("First Party:", Party)
             # replace what's in "First Party (Code) Second Party (Code)" with the new Party
             df.at[index, "First Party (Code)  Second Party (Code)"] = Party
         else:
-            # Skip the row
             df.at[index, "First Party (Code)  Second Party (Code)"] = np.nan
-            continue
 
     # Drop the rows with NaN values
     df.dropna(subset=["First Party (Code)  Second Party (Code)"], inplace=True)
     # Rename the Column to Party
     df.rename(columns={"First Party (Code)  Second Party (Code)": "Party"}, inplace=True)
+    # Drop any rows that have "INC", "BANK", "Trust", "LLC"
+    df = df[~df["Party"].str.contains("INC", na=False)]
+    df = df[~df["Party"].str.contains("BANK", na=False)]
+    df = df[~df["Party"].str.contains("TRUST", na=False)]
+    df = df[~df["Party"].str.contains("LLC", na=False)]
+    # Drop and Duplicate Clerk's Numbers
+    df.drop_duplicates(subset=["Clerk's File No"], inplace=True)
+    # Reset the Index
+    df.reset_index(drop=True, inplace=True)
     return df
 
-# Grabs the Records from the Clerk Site
-def GetRecords(driver, DocType, StartDate: str = None, EndDate: str = None):
+
+# This Function will grab a dataframe from the tables on the Miami-Dade County Clerk's website
+def GetTable(driver):
+    # Get the text of the element with ID="lblResults"
+    Results = driver.find_element(By.ID, "lblResults").text
+    # print("Total Records for Search: " + Results)
+
+    # Divide the total Results by 50 to get the number of pages. Round up to the nearest 50
+    Pages: int = math.ceil(int(Results) / 50)
+    # print("Number of Pages: " + str(Pages))
+
+    # After the search is complete, we need to send the page_source to pandas
+    df = pd.DataFrame(pd.read_html(driver.page_source)[0])
+    # print("First Page")
+    # print(df)
+    time.sleep(3)
+    dfList = [df]
+    # If there are multiple pages we need to loop through them and add them to the dataframe
+    if Pages > 1:
+        for i in range(1, Pages):
+            # print("Going to Next Page: " + str(i+1))
+            # Scroll to the bottom of the page
+            driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+            time.sleep(3)
+            # Loop through the links starting at index 1
+            driver.find_element(By.LINK_TEXT, str(i+1)).click()
+            time.sleep(10)
+            # Send the page_source to pandas to parse the data
+            tDf = pd.DataFrame(pd.read_html(driver.page_source)[0])
+            dfList.append(tDf)
+            # print(str(i) + " Page")
+            # print(tDf)
+
+    # print("Number of Lists: " + str(len(dfList)))
+    Complete = pd.concat(dfList, ignore_index=True)
+    return Complete
+
+
+# This function will Login to the Clerks site
+def Login(driver):
     # Open the Miami-Dade County Clerk's website and login
     driver.get("https://www2.miamidadeclerk.gov/PremierServices/login.aspx")
     time.sleep(5)
@@ -91,10 +149,11 @@ def GetRecords(driver, DocType, StartDate: str = None, EndDate: str = None):
 
     driver.get("https://onlineservices.miamidadeclerk.gov/officialrecords/StandardSearch.aspx")
     time.sleep(5)
+    return 0
 
-    # if StartDate and EndDate are not None, then we need to enter them into the search
-    if StartDate is None:
-        StartDate, EndDate = NoDates()
+
+# This Function will Search the Clerks Site using the given Dates
+def Search(driver, DocType, StartDate: str, EndDate: str):
     # Input the Start Date into the field with the ID of "prec_date_from"
     StartDateField = driver.find_element(By.ID, "prec_date_from")
     StartDateField.click()
@@ -121,24 +180,49 @@ def GetRecords(driver, DocType, StartDate: str = None, EndDate: str = None):
     SearchButton = driver.find_element(By.ID, "btnNameSearch")
     SearchButton.click()
     time.sleep(5)
+    return 0
 
-    # After the search is complete, we need to send the page_source to pandas
-    # to parse the data
-    df = pd.DataFrame(pd.read_html(driver.page_source)[0])
+
+# Grabs the Records from the Clerk Site
+def GetRecords(driver, DocType, StartDate: str = None, EndDate: str = None):
+    # Login to the Clerks Site
+    Login(driver)
+
+    # if StartDate and EndDate are not None, then we need to enter them into the search
+    if StartDate is None:
+        StartDate, EndDate = NoDates()
+
+    # Search the Clerks Site using the Given info
+    Search(driver, DocType, StartDate, EndDate)
+
+    # Get the Table using the GetTable function
+    df = GetTable(driver)
 
     # Drop Rec Book/Page, Plat Book/Page, Blk, Legal
-    df.drop(columns=["Rec Book/Page", "Plat Book/Page", "Blk", "Legal"], inplace=True)
+    df.drop(columns=["Rec Book/Page", "Plat Book/Page", "Blk", "Legal", "Doc Type"], inplace=True)
 
     # Split the Parties from "First Party (Code)  Second Party (Code)" and Rename
     df = SplitParties(df)
+    df.drop(columns="Misc Ref", inplace=True)
+
+    # Rename Clerk's File No to "Case #"
+    df.rename(columns={"Clerk's File No": "Case #"}, inplace=True)
+
+    # Reorder the columns as "Doc Type", "Rec Date", "Case #", "Party"
+    df = df[["Rec Date", "Case #", "Party"]]
 
     # Print and Save
     print(df)
     SaveTo = os.getcwd() + "\\MiamiDadeRecordsTest-" + DocType + ".csv"
     df.to_csv(SaveTo, index=False)
+    driver.quit()
 
     return 0
 
 
 driver = InitDriver()
 GetRecords(driver, DocTypes["PAD"])
+driver = InitDriver()
+GetRecords(driver, DocTypes["DCE"])
+driver = InitDriver()
+GetRecords(driver, DocTypes["Lis"])

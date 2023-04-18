@@ -52,6 +52,8 @@ def InitDriver():
 
 # This Function will split the Parties from "First Party (Code)  Second Party (Code)"
 def SplitParties(df):
+    df["First Name"] = ''
+    df["Middle Name"] = ''
     # Loop through the Dataframe and look at the "First Party (Code)  Second Party (Code)" column
     for index, row in df.iterrows():
         # Split the First Half of the String by the ")  " delimiter
@@ -75,18 +77,29 @@ def SplitParties(df):
             # print("First Party:", Party)
             # replace what's in "First Party (Code) Second Party (Code)" with the new Party
             df.at[index, "First Party (Code)  Second Party (Code)"] = Party
+            if int(Spaces) == 2:
+                # Split the string by the " " delimiter
+                Party = Party.split(" ")
+                df.at[index, "First Name"] = Party[1]
+                df.at[index, "Middle Name"] = Party[2]
+                df.at[index, "First Party (Code)  Second Party (Code)"] = Party[0]
+            if int(Spaces) == 1:
+                # Split the string by the " " delimiter
+                Party = Party.split(" ")
+                df.at[index, "First Name"] = Party[1]
+                df.at[index, "First Party (Code)  Second Party (Code)"] = Party[0]
         else:
             df.at[index, "First Party (Code)  Second Party (Code)"] = np.nan
 
     # Drop the rows with NaN values
     df.dropna(subset=["First Party (Code)  Second Party (Code)"], inplace=True)
     # Rename the Column to Party
-    df.rename(columns={"First Party (Code)  Second Party (Code)": "Party"}, inplace=True)
+    df.rename(columns={"First Party (Code)  Second Party (Code)": "Last Name"}, inplace=True)
     # Drop any rows that have "INC", "BANK", "Trust", "LLC"
-    df = df[~df["Party"].str.contains("INC", na=False)]
-    df = df[~df["Party"].str.contains("BANK", na=False)]
-    df = df[~df["Party"].str.contains("TRUST", na=False)]
-    df = df[~df["Party"].str.contains("LLC", na=False)]
+    df = df[~df["Last Name"].str.contains("INC", na=False)]
+    df = df[~df["Last Name"].str.contains("BANK", na=False)]
+    df = df[~df["Last Name"].str.contains("TRUST", na=False)]
+    df = df[~df["Last Name"].str.contains("LLC", na=False)]
     # Drop and Duplicate Clerk's Numbers
     df.drop_duplicates(subset=["Clerk's File No"], inplace=True)
     # Reset the Index
@@ -96,6 +109,7 @@ def SplitParties(df):
 
 # This Function will grab a dataframe from the tables on the Miami-Dade County Clerk's website
 def GetTable(driver):
+    time.sleep(2)
     # Get the text of the element with ID="lblResults"
     Results = driver.find_element(By.ID, "lblResults").text
     # print("Total Records for Search: " + Results)
@@ -209,7 +223,7 @@ def GetRecords(driver, DocType, StartDate: str = None, EndDate: str = None):
     df.rename(columns={"Clerk's File No": "Case #"}, inplace=True)
 
     # Reorder the columns as "Doc Type", "Rec Date", "Case #", "Party"
-    df = df[["Rec Date", "Case #", "Party"]]
+    df = df[["Rec Date", "Case #", "First Name", "Middle Name", "Last Name"]]
 
     # Print and Save
     print(df)
@@ -222,7 +236,7 @@ def GetRecords(driver, DocType, StartDate: str = None, EndDate: str = None):
 
 driver = InitDriver()
 GetRecords(driver, DocTypes["PAD"])
-driver = InitDriver()
-GetRecords(driver, DocTypes["DCE"])
-driver = InitDriver()
-GetRecords(driver, DocTypes["Lis"])
+# driver = InitDriver()
+# GetRecords(driver, DocTypes["DCE"])
+# driver = InitDriver()
+# GetRecords(driver, DocTypes["Lis"])

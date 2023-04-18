@@ -26,14 +26,17 @@ DocTypes = {
     "Lis": "Lis Pendens (Lis)"
 }
 
+# Asks the user what dates they want to search
 def GetDates():
     StartDate, EndDate = SetDates.GetDates()
     return StartDate, EndDate
 
+# Handles if the user doesn't input any dates
 def NoDates():
     StartDate, EndDate = SetDates.NoDates()
     return StartDate, EndDate
 
+# Inits Driver and passes options into it
 def InitDriver():
     testUA = 'Mozilla/5.0 (Windows NT 4.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/37.0.2049.0 Safari/537.36'
     options = uc.ChromeOptions()
@@ -46,6 +49,31 @@ def InitDriver():
     driver = uc.Chrome(options=options)
     return driver
 
+
+# This Function will split the Parties from "First Party (Code)  Second Party (Code)"
+def SplitParties(df):
+    # Loop through the Dataframe and look at the "First Party (Code)  Second Party (Code)" column
+    for index, row in df.iterrows():
+        # Split the First Half of the String by the ")  " delimiter
+        Party = row["First Party (Code)  Second Party (Code)"].split(")  ")[0]
+
+        # Check if there is a D in the "()"
+        if "(D" in Party:
+            Party = Party.split("(D")[0]
+            # replace what's in "First Party (Code) Second Party (Code)" with the new Party
+            df.at[index, "First Party (Code)  Second Party (Code)"] = Party
+        else:
+            # Skip the row
+            df.at[index, "First Party (Code)  Second Party (Code)"] = np.nan
+            continue
+
+    # Drop the rows with NaN values
+    df.dropna(subset=["First Party (Code)  Second Party (Code)"], inplace=True)
+    # Rename the Column to Party
+    df.rename(columns={"First Party (Code)  Second Party (Code)": "Party"}, inplace=True)
+    return df
+
+# Grabs the Records from the Clerk Site
 def GetRecords(driver, DocType, StartDate: str = None, EndDate: str = None):
     # Open the Miami-Dade County Clerk's website and login
     driver.get("https://www2.miamidadeclerk.gov/PremierServices/login.aspx")
@@ -61,8 +89,7 @@ def GetRecords(driver, DocType, StartDate: str = None, EndDate: str = None):
     PasswordField.send_keys(Keys.ENTER)
     time.sleep(5)
 
-
-    driver.get("https://onlineservices.4-4miamidadeclerk.gov/officialrecords/StandardSearch.aspx")
+    driver.get("https://onlineservices.miamidadeclerk.gov/officialrecords/StandardSearch.aspx")
     time.sleep(5)
 
     # if StartDate and EndDate are not None, then we need to enter them into the search
@@ -95,8 +122,23 @@ def GetRecords(driver, DocType, StartDate: str = None, EndDate: str = None):
     SearchButton.click()
     time.sleep(5)
 
+    # After the search is complete, we need to send the page_source to pandas
+    # to parse the data
+    df = pd.DataFrame(pd.read_html(driver.page_source)[0])
+
+    # Drop Rec Book/Page, Plat Book/Page, Blk, Legal
+    df.drop(columns=["Rec Book/Page", "Plat Book/Page", "Blk", "Legal"], inplace=True)
+
+    # Split the Parties from "First Party (Code)  Second Party (Code)" and Rename
+    df = SplitParties(df)
+
+    # Print and Save
+    print(df)
+    SaveTo = os.getcwd() + "\\MiamiDadeRecordsTest-" + DocType + ".csv"
+    df.to_csv(SaveTo, index=False)
+
     return 0
 
 
 driver = InitDriver()
-GetRecords(driver, DocTypes["PAD"], StartDate="04/13/2023", EndDate="04/14/2023")
+GetRecords(driver, DocTypes["PAD"])

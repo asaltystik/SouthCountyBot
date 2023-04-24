@@ -88,6 +88,8 @@ def SplitParties(df):
                 Party = Party.split(" ")
                 df.at[index, "First Name"] = Party[1]
                 df.at[index, "First Party (Code)  Second Party (Code)"] = Party[0]
+            if int(Spaces) == 0:
+                df.at[index, "First Party (Code)  Second Party (Code)"] = np.nan
         else:
             df.at[index, "First Party (Code)  Second Party (Code)"] = np.nan
 
@@ -225,6 +227,14 @@ def GetRecords(driver, DocType, StartDate: str = None, EndDate: str = None):
     # Reorder the columns as "Doc Type", "Rec Date", "Case #", "Party"
     df = df[["Rec Date", "Case #", "First Name", "Middle Name", "Last Name"]]
 
+    print(df)
+
+    # Search the Property Appraiser's website for the Property Address
+    df = GetPropertyAddress(driver, df)
+
+    # Drop any rows that have a property address of "Not Found"
+    df = df[df["Property Address"] != "Not Found"]
+
     # Print and Save
     print(df)
     SaveTo = os.getcwd() + "\\MiamiDadeRecordsTest-" + DocType + ".csv"
@@ -233,10 +243,177 @@ def GetRecords(driver, DocType, StartDate: str = None, EndDate: str = None):
 
     return 0
 
+# This function will grab the Property Address from the miami-dade county property appraiser's website
+def GetPropertyAddress(driver, df):
+    # Add a Property Address, Property City, Property Zip, Mailing Address, Mailing City, Mailing Zip, Zoning, Land Use, Beds, Bath, SqFt
+    df["Property Address"] = ""
+    df["Property City"] = ""
+    df["Property State"] = "FL"
+    df["Property Zip"] = ""
+    df["Mailing Address"] = ""
+    df["Mailing City"] = ""
+    df["Mailing State"] = ""
+    df["Mailing Zip"] = ""
+    df["Zoning"] = ""
+    df["Land Use"] = ""
+    df["Beds"] = ""
+    df["Bath"] = ""
+    df["SqFt"] = ""
+    df["Year Built"] = ""
+
+    # Loop through the rows in the dataframe
+    for index, row in df.iterrows():
+        # Open the Property Appraiser's website at https://www.miamidade.gov/Apps/PA/propertysearch/#/
+        driver.get("https://www.miamidade.gov/Apps/PA/propertysearch/#/")
+        time.sleep(5)
+
+        # Click Owner Name button
+        driver.find_element(By.ID, "t-owner").click()
+        time.sleep(2)
+
+        # Input the owner name into the field with class="form-control owner-box ng-pristine ng-valid"
+        OwnerNameField = driver.find_element(By.NAME, "ownerName")
+        OwnerNameField.click()
+        OwnerNameField.clear()
+
+        # Type name as humanly as possible
+        # print("Searching Next Name")
+        for char in row["First Name"]:
+            OwnerNameField.send_keys(char)
+            time.sleep(.15)
+        OwnerNameField.send_keys(" ")
+        if row["Middle Name"] != "":
+            for char in row["Middle Name"]:
+                OwnerNameField.send_keys(char)
+                time.sleep(.15)
+            OwnerNameField.send_keys(" ")
+        for char in row["Last Name"]:
+            OwnerNameField.send_keys(char)
+            time.sleep(.15)
+        OwnerNameField.send_keys(Keys.ENTER)
+        time.sleep(10)
+
+        # if the "close" button is present, click it. if not, gra
+        try:
+            driver.find_element(By.CLASS_NAME, "close").click()
+            # Set the Property Address to "Not Found"
+            df.at[index, "Property Address"] = "Not Found"
+        except:
+            # if class="property_info tabular_data" is present, grab the html source and send it to a pandas dataframe
+            try:
+                # if a link with text Comparable Sales is present
+                if driver.find_element(By.LINK_TEXT, "Comparable Sales"):
+                    driver.find_element(By.CLASS_NAME, "layers-list").click()
+                    time.sleep(1)
+                    driver.find_element(By.CSS_SELECTOR, ".ng-scope:nth-child(4) > .ng-pristine").click()
+                    time.sleep(1)
+                    driver.find_element(By.CSS_SELECTOR, ".ng-scope:nth-child(5) > .ng-pristine").click()
+                    time.sleep(2.5)
+                    # Info is City, and Zip
+                    Info = driver.find_element(By.CSS_SELECTOR, ".active-layers").text
+                    # Split the Info String based on newlines
+                    City = Info.split("MUNICIPALITY: ")[1].split("ZIP: ")[0]
+                    Zip = Info.split("MUNICIPALITY: ")[1].split("ZIP: ")[1]
+
+                    # Get the table
+                    df2 = pd.read_html(driver.page_source)[0]
+
+                    # Split Property if it contains duplications
+                    Property = df2.iloc[2, 1].split("Address  ")[1]  # row 2 is Property Address:
+                    DupeTest = Property.split(" ")[0]
+                    for substring in Property.split(" ")[1:]:
+                        if substring == DupeTest:
+                            Property = DupeTest + Property.split(substring)[1]
+                            break
+
+                    # Set List of Street Types
+                    StreetTypes = ["ALY", "AVE", "BND", "BLVD", "CSWY", "CIR", "CT", "CV", "DRIVE", "EXT", "HWY",
+                                   "HOLW", "ISLE", "LN",
+                                   "LNDG", "MNR", "MILE", "PASS", "PATH", "PL", "PT", "ROAD", "ROW", "SQ", "ST", "TER",
+                                   "TWP", "TRCE",
+                                   "TRL", "VIEW", "WALK", "WAY", "RD", "PARK", "COURT", "DR"]
+
+                    # Split the Mailing Address
+                    MailingAddress = df2.iloc[4, 1].split("Address  ")[1]  # row 4 is the mailing address:
+                    # print(MailingAddress)
+                    # if the last part of the String is USA,
+
+                    if MailingAddress.split("  ")[-1] == "USA":
+                        MailingZip = MailingAddress.split("  ")[-2]
+                        MailingState = MailingAddress.split("  ")[-3]
+                        #  Find the First instance of a street type
+                        for streetType in StreetTypes:
+                            if streetType in MailingAddress:
+                                # print("Street Type Found: " + streetType)
+                                # if there is a number after the street type, add it the the street type with a space
+                                if MailingAddress.split(streetType)[1].split(",")[0][1].isdigit():
+                                    streetType = streetType + " " + MailingAddress.split(streetType)[1].split(" ")[1]
+                                MailingCity = MailingAddress.split(streetType)[1].split(",")[0]
+                                break
+                            else:
+                                # make mailing city the two words before the comma
+                                MailingCity = MailingAddress.split(",")[0].split(" ")[-2]
+                        MailingAddress = MailingAddress.split(MailingCity)[0]
+                        # print("Mailing Address: " + MailingAddress)
+                        # print("Mailing City: " + MailingCity)
+                        # print("Mailing State: " + MailingState)
+                        # print("Mailing Zip: " + MailingZip)
+                    else:
+                        MailingZip = MailingAddress.split("  ")[-1]
+                        MailingState = MailingAddress.split("  ")[-2]
+                        #  Find the First instance of a street type
+                        for streetType in StreetTypes:
+                            if streetType in MailingAddress:
+                                # print("Street Type Found: " + streetType)
+                                if MailingAddress.split(streetType)[1].split(",")[0][1].isdigit():
+                                    streetType = streetType + " " + MailingAddress.split(streetType)[1].split(" ")[1]
+                                MailingCity = MailingAddress.split(streetType)[1].split(",")[0]
+                                break
+                                break
+                            else:
+                                MailingCity = MailingAddress.split(",")[0].split(" ")[-2]
+                        MailingAddress = MailingAddress.split(MailingCity)[0]
+                        # print("Mailing Address: " + MailingAddress)
+                        # print("Mailing City: " + MailingCity)
+                        # print("Mailing State: " + MailingState)
+                        # print("Mailing Zip: " + MailingZip)
+
+                    # Set the info in the dataframe
+                    df.loc[index, "Property Address"] = Property
+                    df.loc[index, "Property City"] = City
+                    df.loc[index, "Property Zip"] = Zip
+                    df.loc[index, "Mailing Address"] = MailingAddress
+                    df.loc[index, "Mailing City"] = MailingCity
+                    df.loc[index, "Mailing State"] = MailingState
+                    df.loc[index, "Mailing Zip"] = MailingZip
+                    df.loc[index, "Zoning"] = df2.iloc[5, 1].split("Zone")[1]  # row 5 is the Zoning
+                    df.loc[index, "Land Use"] = df2.iloc[6, 1].split("Use")[1]  # row 6 is the Land Use
+                    df.loc[index, "Beds"] = df2.iloc[7, 1].split("/")[0]  # row 7 is the beds / baths.
+                    df.loc[index, "Bath"] = df2.iloc[7, 1].split("/")[1].split("/")[0]  # Take the First Number and the Number after the first "/". Nothing else
+                    df.loc[index, "SqFt"] = df2.iloc[11, 1].split("Sq.Ft")[0]  # row 11 is the Sqft
+                    df.loc[index, "Year Built"] = df2.iloc[14, 1]  # row 14 is the Year Built
+            except:
+                print("Multiple Results for Search")
+                df.loc[index, "Property Address"] = "Not Found"
+                df.loc[index, "Property City"] = np.nan
+                df.loc[index, "Property Zip"] = np.nan
+                df.loc[index, "Mailing Address"] = np.nan
+                df.loc[index, "Mailing City"] = np.nan
+                df.loc[index, "Mailing State"] = np.nan
+                df.loc[index, "Mailing Zip"] = np.nan
+                df.loc[index, "Zoning"] = np.nan
+                df.loc[index, "Land Use"] = np.nan
+                df.loc[index, "Beds"] = np.nan
+                df.loc[index, "Bath"] = np.nan
+                df.loc[index, "SqFt"] = np.nan
+                df.loc[index, "Year Built"] = np.nan
+                time.sleep(1.5)
+    return df
+
 
 driver = InitDriver()
-GetRecords(driver, DocTypes["PAD"])
-# driver = InitDriver()
-# GetRecords(driver, DocTypes["DCE"])
-# driver = InitDriver()
-# GetRecords(driver, DocTypes["Lis"])
+GetRecords(driver, DocTypes["PAD"], StartDate="04/10/2023", EndDate="04/21/2023")
+driver = InitDriver()
+GetRecords(driver, DocTypes["DCE"], StartDate="04/19/2023", EndDate="04/20/2023")
+driver = InitDriver()
+GetRecords(driver, DocTypes["Lis"], StartDate="04/19/2023", EndDate="04/20/2023")

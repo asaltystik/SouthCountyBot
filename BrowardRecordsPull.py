@@ -106,7 +106,7 @@ def Scrape(driver, DocType):
     except:
         print("No Results Found")
         return None
-    time.sleep(2)
+    time.sleep(10)
     # Grab the Number of rows from class "t-status-text"
     NumRows = driver.find_element(By.CLASS_NAME, "t-status-text").text.split(" ")[-1]
     print("Number of Rows: " + NumRows)
@@ -137,10 +137,10 @@ def Scrape(driver, DocType):
 
             if DocType == DocTypes["LP"] or DocType == DocTypes["PALIE"]:
                 # print the indirect name column and append it to the FirstIndirectName list
-                print("IndirectName: " + columns[FirstIndirectNameIndex].text)
+                # print("IndirectName: " + columns[FirstIndirectNameIndex].text)
                 FirstIndirectName.append(columns[FirstIndirectNameIndex].text)
             else:
-                print("DirectName: " + columns[FirstIndirectNameIndex-1].text)
+                # print("DirectName: " + columns[FirstIndirectNameIndex-1].text)
                 FirstIndirectName.append(columns[FirstIndirectNameIndex-1].text)
 
             # If the DocType is not a Death Certificate or a Property Tax Lien, we need to get the Case Number
@@ -508,4 +508,4 @@ def Run(CurrentDocType, StartDate=None, EndDate=None):
 # time.sleep(5)
 # Run("PRO", "04/13/2023", "04/14/2023")
 # time.sleep(5)
-# Run("PALIE", "03/01/2023", "04/14/2023")
+# Run("PALIE", "03/01/2023", "04/24/2023")

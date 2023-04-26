@@ -23,18 +23,9 @@ import undetected_chromedriver as uc
 DocTypes = {
     "PAD": "Probate & Administration (PAD)",
     "DCE": "Death Certificate (DCE)",
-    "Lis": "Lis Pendens (Lis)"
+    "LIS": "Lis Pendens (Lis)"
 }
 
-# Asks the user what dates they want to search
-def GetDates():
-    StartDate, EndDate = SetDates.GetDates()
-    return StartDate, EndDate
-
-# Handles if the user doesn't input any dates
-def NoDates():
-    StartDate, EndDate = SetDates.NoDates()
-    return StartDate, EndDate
 
 # Inits Driver and passes options into it
 def InitDriver():
@@ -206,7 +197,7 @@ def GetRecords(driver, DocType, StartDate: str = None, EndDate: str = None):
 
     # if StartDate and EndDate are not None, then we need to enter them into the search
     if StartDate is None:
-        StartDate, EndDate = NoDates()
+        StartDate, EndDate = SetDates.NoDates()
 
     # Search the Clerks Site using the Given info
     Search(driver, DocType, StartDate, EndDate)
@@ -237,7 +228,9 @@ def GetRecords(driver, DocType, StartDate: str = None, EndDate: str = None):
 
     # Print and Save
     print(df)
-    SaveTo = os.getcwd() + "\\MiamiDadeRecordsTest-" + DocType + ".csv"
+    Date1 = StartDate.replace("/", "-")
+    Date2 = EndDate.replace("/", "-")
+    SaveTo = os.getcwd() + "\\MiamiDadeRecordsTest-" + DocType + "-" + Date1 + "to" + Date2 + ".csv"
     df.to_csv(SaveTo, index=False)
     driver.quit()
 
@@ -411,9 +404,7 @@ def GetPropertyAddress(driver, df):
     return df
 
 
-driver = InitDriver()
-GetRecords(driver, DocTypes["PAD"], StartDate="04/10/2023", EndDate="04/21/2023")
-driver = InitDriver()
-GetRecords(driver, DocTypes["DCE"], StartDate="04/19/2023", EndDate="04/20/2023")
-driver = InitDriver()
-GetRecords(driver, DocTypes["Lis"], StartDate="04/19/2023", EndDate="04/20/2023")
+def Run(DocType, StartDate, EndDate):
+    driver = InitDriver()
+    df = GetRecords(driver, DocTypes[DocType], StartDate, EndDate)
+    return 0

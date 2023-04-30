@@ -239,6 +239,7 @@ def GetRecords(driver, DocType, StartDate: str = None, EndDate: str = None):
 # This function will grab the Property Address from the miami-dade county property appraiser's website
 def GetPropertyAddress(driver, df):
     # Add a Property Address, Property City, Property Zip, Mailing Address, Mailing City, Mailing Zip, Zoning, Land Use, Beds, Bath, SqFt
+    df["Folio"] = ""
     df["Property Address"] = ""
     df["Property City"] = ""
     df["Property State"] = "FL"
@@ -310,6 +311,10 @@ def GetPropertyAddress(driver, df):
 
                     # Get the table
                     df2 = pd.read_html(driver.page_source)[0]
+                    # print(df2)
+
+                    Folio = df2.iloc[0, 1].split("Folio:  ")[1]
+                    # print(Folio)
 
                     # Split Property if it contains duplications
                     Property = df2.iloc[2, 1].split("Address  ")[1]  # row 2 is Property Address:
@@ -372,6 +377,7 @@ def GetPropertyAddress(driver, df):
                         # print("Mailing Zip: " + MailingZip)
 
                     # Set the info in the dataframe
+                    df.loc[index, "Folio"] = Folio
                     df.loc[index, "Property Address"] = Property
                     df.loc[index, "Property City"] = City
                     df.loc[index, "Property Zip"] = Zip
@@ -387,6 +393,7 @@ def GetPropertyAddress(driver, df):
                     df.loc[index, "Year Built"] = df2.iloc[14, 1]  # row 14 is the Year Built
             except:
                 print("Multiple Results for Search")
+                df.loc[index, "Folio"] = np.nan
                 df.loc[index, "Property Address"] = "Not Found"
                 df.loc[index, "Property City"] = np.nan
                 df.loc[index, "Property Zip"] = np.nan
@@ -408,3 +415,16 @@ def Run(DocType, StartDate, EndDate):
     driver = InitDriver()
     df = GetRecords(driver, DocTypes[DocType], StartDate, EndDate)
     return 0
+
+# driver = InitDriver()
+# df = GetRecords(driver, DocTypes["LIS"], "03/01/2023", "04/01/2023")
+# driver = InitDriver()
+# df = GetRecords(driver, DocTypes["PAD"], "03/01/2023", "04/01/2023")
+# driver = InitDriver()
+# df = GetRecords(driver, DocTypes["DCE"], "03/01/2023", "04/01/2023")
+# driver = InitDriver()
+# df = GetRecords(driver, DocTypes["LIS"], "04/01/2023", "04/27/2023")
+# driver = InitDriver()
+# df = GetRecords(driver, DocTypes["PAD"], "04/01/2023", "04/27/2023")
+# driver = InitDriver()
+# df = GetRecords(driver, DocTypes["DCE"], "04/01/2023", "04/27/2023")

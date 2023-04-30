@@ -15,3 +15,4 @@ cls
 
 rem Run the main.py file
 python %CURRENT_DIR%main.py
+timeout 50

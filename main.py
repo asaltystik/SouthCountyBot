@@ -1,6 +1,7 @@
 import SetDates
 import MiamiDadeRecordsPull
 import BrowardRecordsPull
+import time
 
 def CountyMenu():
     active = True
@@ -124,3 +125,4 @@ def BrowardMenu():
 
 if __name__ == "__main__":
     CountyMenu()
+    time.sleep(60)

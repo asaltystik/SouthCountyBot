@@ -497,15 +497,17 @@ def Run(CurrentDocType, StartDate=None, EndDate=None):
         SaveTo = str(DocTypes[CurrentDocType]) + "-" + str(EndDate) + ".csv"
         print(SaveTo)
 
+    # Add the current working directory to the beginning of the SaveTo string
+    SaveTo = os.getcwd() + "\\Downloads\\" + SaveTo
     df.to_csv(SaveTo, index=False)
     driver.quit()
     return print("Finished Scraping " + str(DocTypes[CurrentDocType]))
 
 
-# Run("DC")
-# time.sleep(2)
-# Run("LP", "04/13/2023", "04/14/2023")
-# time.sleep(5)
-# Run("PRO", "04/13/2023", "04/14/2023")
-# time.sleep(5)
-# Run("PALIE", "03/01/2023", "04/24/2023")
+Run("DC", "03/01/2023", "04/27/2023")
+time.sleep(60)
+Run("LP", "03/01/2023", "04/27/2023")
+time.sleep(60)
+Run("PRO", "03/01/2023", "04/27/2023")
+time.sleep(60)
+Run("PALIE", "03/01/2023", "04/27/2023")

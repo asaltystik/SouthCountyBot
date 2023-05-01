@@ -117,7 +117,13 @@ def Search(driver, StartDate):
     df = pd.read_html(driver.page_source)[0]
     # Drop the un-needed columns
     df = df.drop(columns=["COUNT", "LAST INSPECTION ACTIVITY", "ACTIVITY DATE",
-                          "DISTRICT NUMBER", "INSPECTOR", "OWNER NAME and ADDRESS"])
+                          "DISTRICT NUMBER", "INSPECTOR", "OWNER NAME and ADDRESS",
+                          "DATE OPENED", "VIOLATION", "PERMIT NUMBER"])
+
+    # Drop the rows that have a blank folio number
+    df = df[df["FOLIO NUMBER"] != "---"]
+    # Drop the Rows that have "EXEMPT FROM PUBLIC RECORDS, Florida Statues 119.071" in the folio number
+    df = df[df["FOLIO NUMBER"] != "EXEMPT FROM PUBLIC RECORDS, Florida Statues 119.071"]
 
     # Close the driver and return the dataframe
     driver.close()
